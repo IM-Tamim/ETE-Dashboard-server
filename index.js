@@ -19,7 +19,6 @@ mongoose
   .catch((err) => console.error("❌  MongoDB error:", err.message));
 
 // ── Constants ─────────────────────────────────────────────────
-// No series 25 — removed per spec
 const SERIES_LIST = ["20", "21", "22", "23", "24"];
 
 const SERIES_SEM = {
@@ -30,7 +29,6 @@ const SERIES_SEM = {
   "24": "2nd",
 };
 
-// Subject codes per series (5 each)
 const SERIES_SUBJECTS = {
   "22": ["ETE-3111", "ETE-3113", "ETE-3115", "CSE-3154", "EEE-3153"],
   "23": ["ETE-2111", "ETE-2113", "CSE-2153", "HUM-2115", "ETE-2117"],
@@ -61,19 +59,18 @@ const studentSchema = new mongoose.Schema({
   status:          { type: String, enum: ["active", "inactive"], default: "active" },
 }, { timestamps: true });
 
-// ── Attendance: one doc per student, nested subjects ──────────
 const attendanceRecordSchema = new mongoose.Schema({
-  date:   { type: String, required: true },  // "YYYY-MM-DD"
+  date:   { type: String, required: true },
   status: { type: String, enum: ["present", "absent"], required: true },
 }, { _id: false });
 
 const attendanceSubjectSchema = new mongoose.Schema({
-  subject:             { type: String, required: true },
-  records:             [attendanceRecordSchema],
-  totalClasses:        { type: Number, default: 0 },
-  totalPresent:        { type: Number, default: 0 },
-  totalAbsent:         { type: Number, default: 0 },
-  attendancePercentage:{ type: Number, default: 0 },
+  subject:              { type: String, required: true },
+  records:              [attendanceRecordSchema],
+  totalClasses:         { type: Number, default: 0 },
+  totalPresent:         { type: Number, default: 0 },
+  totalAbsent:          { type: Number, default: 0 },
+  attendancePercentage: { type: Number, default: 0 },
 }, { _id: false });
 
 const attendanceSchema = new mongoose.Schema({
@@ -84,14 +81,13 @@ const attendanceSchema = new mongoose.Schema({
   subjects:    [attendanceSubjectSchema],
 }, { timestamps: true });
 
-// ── Marks: one doc per student, nested subjects ───────────────
 const marksSubjectSchema = new mongoose.Schema({
   subject:    { type: String, required: true },
-  CT:         { type: Number, default: 0 },   // out of 20
-  Assignment: { type: Number, default: 0 },   // out of 10
-  Attendance: { type: Number, default: 0 },   // out of 10
-  Semester:   { type: Number, default: 0 },   // out of 60
-  total:      { type: Number, default: 0 },   // out of 100
+  CT:         { type: Number, default: 0 },
+  Assignment: { type: Number, default: 0 },
+  Attendance: { type: Number, default: 0 },
+  Semester:   { type: Number, default: 0 },
+  total:      { type: Number, default: 0 },
   grade:      { type: String, trim: true },
   gradePoint: { type: Number, default: 0 },
 }, { _id: false });
@@ -170,7 +166,6 @@ app.delete("/api/students/:id", async (req, res) => {
 });
 
 // ── ATTENDANCE ────────────────────────────────────────────────
-// GET all attendance docs (optionally filter by series)
 app.get("/api/attendance", async (req, res) => {
   try {
     const filter = {};
@@ -180,7 +175,6 @@ app.get("/api/attendance", async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
 
-// GET single attendance doc by roll
 app.get("/api/attendance/roll/:roll", async (req, res) => {
   try {
     const doc = await Attendance.findOne({ roll: req.params.roll });
@@ -189,23 +183,21 @@ app.get("/api/attendance/roll/:roll", async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
 
-// GET summary: per-subject average attendance % across a series
 app.get("/api/attendance/summary", async (req, res) => {
   try {
     const filter = {};
     if (req.query.series) filter.series = req.query.series;
     const docs = await Attendance.find(filter);
 
-    // Aggregate per subject
     const subjectMap = {};
     docs.forEach((doc) => {
       doc.subjects.forEach((sub) => {
         if (!subjectMap[sub.subject]) {
           subjectMap[sub.subject] = { totalClasses: 0, totalPresent: 0, studentCount: 0 };
         }
-        subjectMap[sub.subject].totalClasses  += sub.totalClasses;
-        subjectMap[sub.subject].totalPresent  += sub.totalPresent;
-        subjectMap[sub.subject].studentCount  += 1;
+        subjectMap[sub.subject].totalClasses += sub.totalClasses;
+        subjectMap[sub.subject].totalPresent += sub.totalPresent;
+        subjectMap[sub.subject].studentCount += 1;
       });
     });
 
@@ -220,12 +212,10 @@ app.get("/api/attendance/summary", async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
 
-// POST create/upsert attendance doc for a student
 app.post("/api/attendance", async (req, res) => {
   try {
     const body = { ...req.body };
     if (body.series && !body.semester) body.semester = SERIES_SEM[body.series] || "";
-    // Recalculate stats for each subject
     if (Array.isArray(body.subjects)) {
       body.subjects = body.subjects.map((sub) => {
         const total   = sub.records?.length || 0;
@@ -248,7 +238,6 @@ app.post("/api/attendance", async (req, res) => {
   } catch (e) { res.status(400).json({ message: e.message }); }
 });
 
-// PATCH add a single attendance record for one subject of a student
 app.patch("/api/attendance/:roll/subjects/:subject/records", async (req, res) => {
   try {
     const { roll, subject } = req.params;
@@ -259,7 +248,6 @@ app.patch("/api/attendance/:roll/subjects/:subject/records", async (req, res) =>
     const subDoc = doc.subjects.find((s) => s.subject === subject);
     if (!subDoc) return res.status(404).json({ message: "Subject not found in doc" });
 
-    // Avoid duplicate date
     const exists = subDoc.records.find((r) => r.date === date);
     if (exists) return res.status(409).json({ message: "Record for this date already exists" });
 
@@ -282,7 +270,6 @@ app.delete("/api/attendance/:id", async (req, res) => {
 });
 
 // ── MARKS ─────────────────────────────────────────────────────
-// GET all marks docs (optionally filter by series)
 app.get("/api/marks", async (req, res) => {
   try {
     const filter = {};
@@ -292,7 +279,6 @@ app.get("/api/marks", async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
 
-// GET single marks doc by roll
 app.get("/api/marks/roll/:roll", async (req, res) => {
   try {
     const doc = await Marks.findOne({ roll: req.params.roll });
@@ -301,7 +287,6 @@ app.get("/api/marks/roll/:roll", async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
 
-// GET marks summary: grade distribution + subject avg
 app.get("/api/marks/summary", async (req, res) => {
   try {
     const filter = {};
@@ -329,15 +314,13 @@ app.get("/api/marks/summary", async (req, res) => {
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
 
-// POST create/upsert marks doc
 app.post("/api/marks", async (req, res) => {
   try {
     const body = { ...req.body };
     if (body.series && !body.semester) body.semester = SERIES_SEM[body.series] || "";
-    // Auto-fill grade/gradePoint from total if not provided
     if (Array.isArray(body.subjects)) {
       body.subjects = body.subjects.map((sub) => {
-        const total = (sub.CT || 0) + (sub.Assignment || 0) + (sub.Attendance || 0) + (sub.Semester || 0);
+        const total    = (sub.CT || 0) + (sub.Assignment || 0) + (sub.Attendance || 0) + (sub.Semester || 0);
         const computed = getGrade(total);
         return {
           ...sub,
@@ -376,11 +359,16 @@ app.delete("/api/marks/:id", async (req, res) => {
 // ── DASHBOARD STATS ───────────────────────────────────────────
 app.get("/api/dashboard/stats", async (req, res) => {
   try {
+    // ── series filter from query param ────────────────────────
+    const seriesFilter = req.query.series || null;
+    const markFilter   = seriesFilter ? { series: seriesFilter } : {};
+    const attFilter    = seriesFilter ? { series: seriesFilter } : {};
+
     const [totalStudents, series22Count, allAttendance, allMarks, seriesDist] = await Promise.all([
-      Student.countDocuments({ status: "active" }),
+      Student.countDocuments(seriesFilter ? { series: seriesFilter, status: "active" } : { status: "active" }),
       Student.countDocuments({ series: "22", status: "active" }),
-      Attendance.find(),
-      Marks.find(),
+      Attendance.find(attFilter),   // ✅ now filtered by series
+      Marks.find(markFilter),       // ✅ now filtered by series
       Student.aggregate([
         { $group: { _id: "$series", count: { $sum: 1 } } },
         { $project: { series: "$_id", count: 1, _id: 0 } },
@@ -427,12 +415,19 @@ app.get("/api/dashboard/stats", async (req, res) => {
       .sort((a, b) => b.avgMarks - a.avgMarks)
       .slice(0, 6);
 
-    // ── Top students ──────────────────────────────────────────
+    // ── Top students — includes series field ──────────────────
     const studentAvgMap = {};
     allMarks.forEach((doc) => {
       const totals = doc.subjects.map((s) => s.total);
-      const avg    = totals.length ? parseFloat((totals.reduce((a, b) => a + b, 0) / totals.length).toFixed(1)) : 0;
-      studentAvgMap[doc.roll] = { name: doc.studentName, roll: doc.roll, avgMarks: avg };
+      const avg    = totals.length
+        ? parseFloat((totals.reduce((a, b) => a + b, 0) / totals.length).toFixed(1))
+        : 0;
+      studentAvgMap[doc.roll] = {
+        name:     doc.studentName,
+        roll:     doc.roll,
+        series:   doc.series,   // ✅ series field — was missing before
+        avgMarks: avg,
+      };
     });
     const topStudents = Object.values(studentAvgMap)
       .sort((a, b) => b.avgMarks - a.avgMarks)
@@ -444,14 +439,19 @@ app.get("/api/dashboard/stats", async (req, res) => {
       let present = 0, classes = 0;
       doc.subjects.forEach((sub) => { present += sub.totalPresent; classes += sub.totalClasses; });
       const pct = classes > 0 ? Math.round((present / classes) * 100) : 0;
-      studentAttMap[doc.roll] = { name: doc.studentName, roll: doc.roll, series: doc.series, attendance: pct };
+      studentAttMap[doc.roll] = {
+        name:       doc.studentName,
+        roll:       doc.roll,
+        series:     doc.series,
+        attendance: pct,
+      };
     });
     const lowAttendance = Object.values(studentAttMap)
       .filter((s) => s.attendance < 75)
       .sort((a, b) => a.attendance - b.attendance)
       .slice(0, 5);
 
-    // ── Attendance trend (mock monthly from record dates) ─────
+    // ── Attendance trend ──────────────────────────────────────
     const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     const monthMap   = {};
     allAttendance.forEach((doc) => {
@@ -471,7 +471,7 @@ app.get("/api/dashboard/stats", async (req, res) => {
       .slice(-6)
       .map((m) => ({ month: monthNames[m.month], pct: Math.round((m.present / m.total) * 100) }));
 
-    // ── Series distribution ───────────────────────────────────
+    // ── Series distribution (always all series) ───────────────
     const seriesDistribution = SERIES_LIST.map((s) => ({
       series: s,
       count:  seriesDist.find((d) => d.series === s)?.count || 0,
